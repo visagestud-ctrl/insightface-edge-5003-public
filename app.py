@@ -1,6 +1,7 @@
 import base64
 import os
 from typing import List, Dict, Any, Tuple
+from threading import Lock
 
 import cv2
 import numpy as np
@@ -29,7 +30,18 @@ def _init_model() -> FaceAnalysis:
     return fa
 
 
-app_face = _init_model()
+app_face = None
+_model_lock = Lock()
+
+
+def get_model() -> FaceAnalysis:
+    global app_face
+    if app_face is not None:
+        return app_face
+    with _model_lock:
+        if app_face is None:
+            app_face = _init_model()
+    return app_face
 
 
 def find_nearest_edge(img_gray: np.ndarray, x: float, y: float, radius: int = 15) -> Tuple[int, int]:
@@ -135,6 +147,11 @@ def detect() -> Any:
     if img is None:
         return jsonify({"success": False, "error": "No image provided"}), 400
 
+    try:
+        model = get_model()
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Model init failed: {e}"}), 200
+
     edge_strength = request.form.get("edge_strength")
     if not edge_strength:
         body = request.get_json(silent=True) or {}
@@ -143,10 +160,10 @@ def detect() -> Any:
     h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    faces = app_face.get(img)
+    faces = model.get(img)
     if len(faces) == 0:
         img_flipped = cv2.flip(img, 1)
-        faces = app_face.get(img_flipped)
+        faces = model.get(img_flipped)
         if len(faces) > 0:
             for face in faces:
                 if hasattr(face, "landmark_2d_106") and face.landmark_2d_106 is not None:
