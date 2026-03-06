@@ -24,9 +24,10 @@ LANDMARK_106_NAMES = {
 def _init_model() -> Any:
     from insightface.app import FaceAnalysis
 
-    det_size = int(os.getenv("DET_SIZE", "384"))
+    det_size = int(os.getenv("DET_SIZE", "320"))
+    pack_name = os.getenv("INSIGHTFACE_PACK", "buffalo_sc")
     providers = ["CPUExecutionProvider"]
-    fa = FaceAnalysis(providers=providers, allowed_modules=["detection", "landmark_2d_106"])
+    fa = FaceAnalysis(name=pack_name, providers=providers, allowed_modules=["detection", "landmark_2d_106"])
     fa.prepare(ctx_id=0, det_size=(det_size, det_size))
     return fa
 
@@ -172,7 +173,7 @@ def detect() -> Any:
 
     h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    infer_img, scale = prepare_inference_image(img, max_dim=int(os.getenv("MAX_INFER_DIM", "960")))
+    infer_img, scale = prepare_inference_image(img, max_dim=int(os.getenv("MAX_INFER_DIM", "640")))
     infer_h, infer_w = infer_img.shape[:2]
 
     faces = model.get(infer_img)
