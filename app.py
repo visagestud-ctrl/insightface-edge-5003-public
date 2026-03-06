@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from insightface.app import FaceAnalysis
 
 
 app = Flask(__name__)
@@ -22,7 +21,9 @@ LANDMARK_106_NAMES = {
 }
 
 
-def _init_model() -> FaceAnalysis:
+def _init_model() -> Any:
+    from insightface.app import FaceAnalysis
+
     det_size = int(os.getenv("DET_SIZE", "384"))
     providers = ["CPUExecutionProvider"]
     fa = FaceAnalysis(providers=providers, allowed_modules=["detection", "landmark_2d_106"])
@@ -34,7 +35,7 @@ app_face = None
 _model_lock = Lock()
 
 
-def get_model() -> FaceAnalysis:
+def get_model() -> Any:
     global app_face
     if app_face is not None:
         return app_face
