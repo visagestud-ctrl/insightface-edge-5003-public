@@ -23,7 +23,7 @@ LANDMARK_106_NAMES = {
 
 
 def _init_model() -> FaceAnalysis:
-    det_size = int(os.getenv("DET_SIZE", "640"))
+    det_size = int(os.getenv("DET_SIZE", "384"))
     providers = ["CPUExecutionProvider"]
     fa = FaceAnalysis(providers=providers, allowed_modules=["detection", "landmark_2d_106"])
     fa.prepare(ctx_id=0, det_size=(det_size, det_size))
@@ -136,6 +136,18 @@ def decode_image_from_request() -> np.ndarray:
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
 
+def prepare_inference_image(img: np.ndarray, max_dim: int = 960) -> Tuple[np.ndarray, float]:
+    h, w = img.shape[:2]
+    longest = max(h, w)
+    if longest <= max_dim:
+        return img, 1.0
+    scale = max_dim / float(longest)
+    out_w = max(1, int(round(w * scale)))
+    out_h = max(1, int(round(h * scale)))
+    resized = cv2.resize(img, (out_w, out_h), interpolation=cv2.INTER_AREA)
+    return resized, scale
+
+
 @app.route("/health", methods=["GET"])
 def health() -> Any:
     return jsonify({"ok": True, "service": "insightface-edge", "model": "landmark_2d_106"})
@@ -159,15 +171,17 @@ def detect() -> Any:
 
     h, w = img.shape[:2]
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    infer_img, scale = prepare_inference_image(img, max_dim=int(os.getenv("MAX_INFER_DIM", "960")))
+    infer_h, infer_w = infer_img.shape[:2]
 
-    faces = model.get(img)
+    faces = model.get(infer_img)
     if len(faces) == 0:
-        img_flipped = cv2.flip(img, 1)
+        img_flipped = cv2.flip(infer_img, 1)
         faces = model.get(img_flipped)
         if len(faces) > 0:
             for face in faces:
                 if hasattr(face, "landmark_2d_106") and face.landmark_2d_106 is not None:
-                    face.landmark_2d_106[:, 0] = w - face.landmark_2d_106[:, 0]
+                    face.landmark_2d_106[:, 0] = infer_w - face.landmark_2d_106[:, 0]
 
     if len(faces) == 0:
         return jsonify({"success": False, "error": "No face detected"}), 200
@@ -179,8 +193,10 @@ def detect() -> Any:
     lm = face.landmark_2d_106
     points = []
     for i in range(len(lm)):
-        x = float(lm[i][0])
-        y = float(lm[i][1])
+        x = float(lm[i][0]) / scale
+        y = float(lm[i][1]) / scale
+        x = max(0.0, min(float(w - 1), x))
+        y = max(0.0, min(float(h - 1), y))
         points.append({
             "index": i,
             "name": LANDMARK_106_NAMES.get(i, f"point_{i}"),
